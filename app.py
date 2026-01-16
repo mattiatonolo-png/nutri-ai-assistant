@@ -8,7 +8,17 @@ from google.genai import types
 st.set_page_config(page_title="Nutri-AI Biblioteca", page_icon="📚", layout="wide")
 st.title("📚 Nutri-AI: Clinical RAG System (Multi-Source)")
 
+# --- NASCONDI ELEMENTI DI STREAMLIT (Menu, Footer, Header) ---
+hide_st_style = """
+            <style>
+            #MainMenu {visibility: hidden;}
+            footer {visibility: hidden;}
+            header {visibility: hidden;}
+            </style>
+            """
+st.markdown(hide_st_style, unsafe_allow_html=True)
 # --- FUNZIONE PER LEGGERE TUTTI I PDF ---
+
 def carica_biblioteca(cartella):
     """Legge tutti i PDF in una cartella e unisce i testi."""
     testo_totale = ""
