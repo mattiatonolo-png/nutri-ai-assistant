@@ -3,3 +3,4 @@ google-genai
 pypdf
 cryptography
 fpdf
+pandas
