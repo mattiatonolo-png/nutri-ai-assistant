@@ -3,7 +3,45 @@ import os
 from pypdf import PdfReader
 from google import genai
 from google.genai import types
+from fpdf import FPDF
 
+# --- CLASSE PER GENERARE IL PDF ---
+class PDF(FPDF):
+    def header(self):
+        # Intestazione che appare su ogni pagina
+        self.set_font('Arial', 'B', 12)
+        self.cell(0, 10, 'Nutri-AI - Piano Clinico', 0, 1, 'C')
+        self.ln(5)
+
+    def footer(self):
+        # Piè di pagina con numero pagina
+        self.set_y(-15)
+        self.set_font('Arial', 'I', 8)
+        self.cell(0, 10, f'Pagina {self.page_no()}', 0, 0, 'C')
+
+def crea_pdf_download(paziente_txt, dieta_txt):
+    pdf = PDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    
+    # 1. Scriviamo i dati del paziente
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 10, "Profilo Paziente:", 0, 1)
+    pdf.set_font("Arial", size=10)
+    # Rimuoviamo caratteri speciali/emoji che rompono il PDF standard
+    safe_paziente = paziente_txt.encode('latin-1', 'replace').decode('latin-1')
+    pdf.multi_cell(0, 6, safe_paziente)
+    pdf.ln(5)
+    
+    # 2. Scriviamo la risposta dell'AI
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 10, "Raccomandazione Clinica:", 0, 1)
+    pdf.set_font("Arial", size=10)
+    safe_dieta = dieta_txt.encode('latin-1', 'replace').decode('latin-1')
+    pdf.multi_cell(0, 6, safe_dieta)
+    
+    # Restituisce il file come stringa di byte (pronto per il download)
+    return pdf.output(dest='S').encode('latin-1')
 # --- 1. CONFIGURAZIONE PAGINA ---
 st.set_page_config(page_title="Nutri-AI Clinical", page_icon="🩺", layout="wide")
 
