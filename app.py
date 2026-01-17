@@ -320,7 +320,7 @@ TASK OPERATIVO:
 3. IMPORTANTE: Usa Tabelle Markdown per schemi dietetici.
 """
 PORTANTE PER IL LAYOUT: Usa tabelle Markdown (| Colonna 1 | Colonna 2 |) per le diete. Verranno convertite in tabelle professionali nel PDF.
-"""
+
 
 # --- 9. CHAT & OUTPUT ---
 if "messages" not in st.session_state:
