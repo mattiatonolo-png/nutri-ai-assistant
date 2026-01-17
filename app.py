@@ -4,8 +4,8 @@ import pandas as pd
 from pypdf import PdfReader
 from google import genai
 from google.genai import types
-from xhtml2pdf import pisa  # <--- NUOVO MOTORE PDF
-import markdown             # <--- PER CONVERTIRE TESTO AI IN HTML
+from xhtml2pdf import pisa
+import markdown
 
 # --- 1. CONFIGURAZIONE PAGINA ---
 st.set_page_config(page_title="Nutri-AI Clinical", page_icon="🩺", layout="wide")
@@ -25,17 +25,20 @@ def check_password():
         st.session_state.authenticated = False
     if st.session_state.authenticated:
         return True
-    st.title("🔒 Accesso Riservato")
-    password_input = st.text_input("Password", type="password")
-    if st.button("Accedi"):
-        try:
-            if password_input == st.secrets["APP_PASSWORD"]:
-                st.session_state.authenticated = True
-                st.rerun()
-            else:
-                st.error("Password errata.")
-        except:
-            st.error("Password non configurata nei Secrets!")
+    
+    col1, col2, col3 = st.columns([1,2,1])
+    with col2:
+        st.title("🔒 Accesso Riservato")
+        password_input = st.text_input("Password", type="password")
+        if st.button("Accedi", use_container_width=True):
+            try:
+                if password_input == st.secrets["APP_PASSWORD"]:
+                    st.session_state.authenticated = True
+                    st.rerun()
+                else:
+                    st.error("Password errata.")
+            except:
+                st.error("Password non configurata nei Secrets!")
     return False
 
 if not check_password():
@@ -45,7 +48,7 @@ if not check_password():
 # APP REALE
 # =========================================================
 
-st.title("🩺 Nutri-AI: Clinical Assistant v2.1")
+st.title("🩺 Nutri-AI: Clinical Assistant v3.0")
 
 # --- 3. API KEY ---
 try:
@@ -56,111 +59,118 @@ except:
 
 client = genai.Client(api_key=LA_MIA_API_KEY)
 
-# --- 4. MOTORE PDF PRO (HTML TO PDF) ---
+# --- 4. MOTORE PDF "PREMIUM" (Styling Avanzato) ---
 def crea_pdf_html(dati_paziente, testo_ai):
-    # 1. Convertiamo il Markdown dell'AI in HTML (supporta tabelle)
+    # Convertiamo Markdown in HTML
     html_ai = markdown.markdown(testo_ai, extensions=['tables'])
-    
-    # 2. Convertiamo i dati paziente (che sono testo semplice) in HTML leggibile
-    # Sostituiamo i ritorni a capo con <br> per l'HTML
     html_paziente = dati_paziente.replace("\n", "<br>")
 
-    # 3. Template HTML + CSS (Lo Stile del Report)
+    # CSS AVANZATO PER DESIGN MEDICO
     html_template = f"""
     <html>
     <head>
         <style>
             @page {{
                 size: A4;
-                margin: 2cm;
+                margin: 1.5cm;
+                @frame footer_frame {{
+                    -pdf-frame-content: footerContent;
+                    bottom: 0cm;
+                    margin-left: 1.5cm;
+                    margin-right: 1.5cm;
+                    height: 1cm;
+                }}
             }}
             body {{
-                font-family: Helvetica, Arial, sans-serif;
-                font-size: 12px;
+                font-family: Helvetica, sans-serif;
+                font-size: 11px;
                 color: #333;
-                line-height: 1.5;
+                line-height: 1.4;
             }}
-            .header {{
-                text-align: center;
-                border-bottom: 2px solid #2c3e50;
-                padding-bottom: 10px;
-                margin-bottom: 20px;
-            }}
-            h1 {{ color: #2c3e50; font-size: 18px; }}
-            h2 {{ color: #16a085; font-size: 16px; margin-top: 20px; border-bottom: 1px solid #ddd; }}
-            h3 {{ color: #2c3e50; font-size: 14px; margin-top: 15px; }}
-            
-            .box-paziente {{
-                background-color: #f8f9fa;
-                border: 1px solid #ddd;
+            /* HEADER STYLES */
+            .header-bar {{
+                background-color: #008080; /* Teal Medico */
+                color: white;
                 padding: 15px;
+                text-align: center;
                 border-radius: 5px;
                 margin-bottom: 20px;
-                font-family: Courier, monospace; /* Font tipo macchina da scrivere per i dati */
+            }}
+            h1 {{ margin:0; font-size: 20px; text-transform: uppercase; }}
+            .subtitle {{ font-size: 10px; font-weight: normal; margin-top: 5px; }}
+
+            /* SECTION STYLES */
+            h2 {{
+                color: #008080;
+                font-size: 14px;
+                border-bottom: 2px solid #008080;
+                padding-bottom: 5px;
+                margin-top: 25px;
+            }}
+            h3 {{ color: #2c3e50; font-size: 12px; margin-top: 15px; font-weight: bold; }}
+            
+            /* BOX PAZIENTE */
+            .box-paziente {{
+                background-color: #f0f7f7; /* Grigio/Verde chiarissimo */
+                border-left: 5px solid #008080;
+                padding: 15px;
+                margin-bottom: 20px;
+                font-size: 10px;
             }}
             
-            /* Stile Tabelle */
+            /* TABELLE (La parte importante) */
             table {{
                 width: 100%;
                 border-collapse: collapse;
                 margin-top: 10px;
-                margin-bottom: 10px;
-            }}
-            th, td {{
-                border: 1px solid #ddd;
-                padding: 8px;
-                text-align: left;
+                margin-bottom: 15px;
+                font-size: 10px;
             }}
             th {{
-                background-color: #2c3e50;
+                background-color: #008080;
                 color: white;
+                font-weight: bold;
+                padding: 8px;
+                text-align: left;
+                border: 1px solid #006666;
             }}
+            td {{
+                border: 1px solid #ddd;
+                padding: 6px;
+                color: #444;
+            }}
+            /* Effetto Zebra (Righe alterne) */
+            tr:nth-child(even) {{ background-color: #f9f9f9; }}
             
-            .footer {{
-                position: fixed;
-                bottom: 0;
-                width: 100%;
-                text-align: center;
-                font-size: 10px;
-                color: #777;
-                border-top: 1px solid #ddd;
-                padding-top: 10px;
-            }}
+            /* LISTE */
+            ul {{ margin-top: 0; padding-left: 20px; }}
+            li {{ margin-bottom: 3px; }}
         </style>
     </head>
     <body>
-        <div class="header">
-            <h1>NUTRI-AI | REPORT CLINICO</h1>
-            <p>Documento generato da Intelligenza Artificiale - Supervisione Medica Richiesta</p>
+        <div class="header-bar">
+            <h1>Piano Clinico Nutrizionale</h1>
+            <div class="subtitle">Generato con Nutri-AI Assistant - Supervisione Medica Richiesta</div>
         </div>
 
         <div class="box-paziente">
-            <b>ANAGRAFICA E QUADRO CLINICO:</b><br><br>
+            <strong>QUADRO CLINICO & ANAMNESI:</strong><br><br>
             {html_paziente}
         </div>
 
-        <h2>VALUTAZIONE E PIANO NUTRIZIONALE</h2>
         {html_ai}
 
-        <div class="footer">
-            Report generato il {pd.Timestamp.now().strftime('%d/%m/%Y')} - Nutri-AI Assistant
+        <div id="footerContent" style="text-align:center; color:#999; font-size:9px;">
+            Report generato il {pd.Timestamp.now().strftime('%d/%m/%Y')} | Documento confidenziale
         </div>
     </body>
     </html>
     """
     
-    # 4. Generazione File PDF
     from io import BytesIO
     result_file = BytesIO()
-    
-    pisa_status = pisa.CreatePDF(
-        html_template,                # Sorgente HTML
-        dest=result_file              # Destinazione (in memoria)
-    )
-    
-    if pisa_status.err:
-        return None
-        
+    pisa_status = pisa.CreatePDF(html_template, dest=result_file)
+    if pisa_status.err: return None
     return result_file.getvalue()
 
 # --- 5. DATA INGESTION ---
@@ -181,55 +191,64 @@ def carica_biblioteca():
 
 CONTESTO_BIBLIOTECA, LISTA_FILE = carica_biblioteca()
 
-# --- 6. SIDEBAR CLINICA ESTESA ---
+# --- 6. SIDEBAR CLINICA AVANZATA ---
 with st.sidebar:
     st.header("📋 Anamnesi Paziente")
     
-    col1, col2 = st.columns(2)
-    with col1:
-        sesso = st.selectbox("Sesso", ["Uomo", "Donna"])
-        eta = st.number_input("Età", 18, 100, 30)
-    with col2:
-        peso = st.number_input("Peso (kg)", 40, 150, 70)
-        altezza = st.number_input("Altezza (cm)", 140, 220, 170)
-    
-    st.divider()
-    st.subheader("Quadro Patologico")
-    
-    patologie_metaboliche = st.multiselect("Metaboliche", ["Diabete T1", "Diabete T2", "Insulino-resistenza", "Dislipidemia", "Gotta"])
-    patologie_gastro = st.multiselect("Gastro-Intestinali", ["IBS (Colon Irritabile)", "Reflusso/Gastrite", "Celiachia", "IBD (Crohn/Colite)", "SIBO"])
-    patologie_endocrine = st.multiselect("Endocrine", ["Ipotiroidismo", "Ipertiroidismo", "Hashimoto", "PCOS", "Endometriosi"])
-    
-    allergie = st.text_input("Allergie/Intolleranze", placeholder="Es. Lattosio, Nichel, Istamina")
+    # Sezione Dati Biometrici
+    with st.expander("Dati Biometrici", expanded=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            sesso = st.selectbox("Sesso", ["Uomo", "Donna"])
+            eta = st.number_input("Età", 18, 100, 30)
+        with col2:
+            peso = st.number_input("Peso (kg)", 40, 150, 70)
+            altezza = st.number_input("Altezza (cm)", 140, 220, 170)
+
+    # Sezione Preferenze Alimentari (NOVITÀ RICHIESTA)
+    with st.expander("Regime & Gusti", expanded=True):
+        regime = st.selectbox("Tipo di Dieta", 
+                              ["Onnivora (Classica)", "Vegetariana", "Vegana", "Pescatariana", "Chetogenica", "Paleo"])
+        
+        cibi_no = st.text_input("⛔ Alimenti da Escludere", 
+                                placeholder="Es. Cipolla, Broccoli, Coriandolo...")
+
+    # Sezione Patologie
+    with st.expander("Quadro Patologico"):
+        patologie_metaboliche = st.multiselect("Metaboliche", ["Diabete T1", "Diabete T2", "Insulino-resistenza", "Dislipidemia", "Gotta"])
+        patologie_gastro = st.multiselect("Gastro-Intestinali", ["IBS (Colon Irritabile)", "Reflusso/Gastrite", "Celiachia", "IBD", "SIBO"])
+        patologie_endocrine = st.multiselect("Endocrine", ["Ipotiroidismo", "Ipertiroidismo", "Hashimoto", "PCOS", "Endometriosi"])
+        allergie = st.text_input("Allergie/Intolleranze", placeholder="Es. Lattosio, Nichel")
     
     st.divider()
     obiettivo = st.selectbox("Obiettivo Clinico", 
-                             ["Dimagrimento (Ipocalorica)", "Mantenimento", "Ipertrofia (Ipercalorica)", 
-                              "Protocollo Antinfiammatorio", "Gestione Glicemica", "Low FODMAP"])
+                             ["Dimagrimento", "Mantenimento", "Ipertrofia", "Antinfiammatorio", "Gestione Glicemica"])
 
 # --- 7. TABELLA ESAMI SANGUE ---
-st.subheader("🩸 Esami Ematici Rilevanti")
-st.info("Compila la tabella con i valori fuori range o rilevanti.")
+st.subheader("🩸 Esami Ematici & Note")
+col_sx, col_dx = st.columns([2, 1])
 
-df_template = pd.DataFrame(
-    [
-        {"Esame": "Glucosio", "Valore": 90, "Unità": "mg/dL", "Note": ""},
-        {"Esame": "Colesterolo Tot", "Valore": 180, "Unità": "mg/dL", "Note": ""},
-        {"Esame": "Ferro", "Valore": 80, "Unità": "mcg/dL", "Note": ""},
-        {"Esame": "TSH", "Valore": 2.5, "Unità": "mIU/L", "Note": ""},
-        {"Esame": "Vitamina D", "Valore": 30, "Unità": "ng/mL", "Note": ""},
-    ]
-)
+with col_sx:
+    # Tabella più compatta
+    df_template = pd.DataFrame([
+        {"Esame": "Glucosio", "Valore": 90, "Unità": "mg/dL"},
+        {"Esame": "Colesterolo Tot", "Valore": 180, "Unità": "mg/dL"},
+        {"Esame": "Ferro", "Valore": 80, "Unità": "mcg/dL"},
+        {"Esame": "TSH", "Valore": 2.5, "Unità": "mIU/L"},
+    ])
+    esami_df = st.data_editor(df_template, num_rows="dynamic", use_container_width=True)
 
-esami_df = st.data_editor(df_template, num_rows="dynamic", use_container_width=True)
+with col_dx:
+    st.info(f"📚 Fonti attive: {len(LISTA_FILE)}")
+    st.caption("Modifica i valori in tabella prima di chiedere il consulto.")
+
+# --- 8. PROMPT DINAMICO AGGIORNATO ---
 stringa_esami = esami_df.to_string(index=False)
-
-# --- 8. PROMPT DINAMICO ---
 PROFILO_PAZIENTE = f"""
 ANAGRAFICA: {sesso}, {eta} anni, {peso}kg, {altezza}cm.
-PATOLOGIE METABOLICHE: {', '.join(patologie_metaboliche)}
-PATOLOGIE GASTRO: {', '.join(patologie_gastro)}
-PATOLOGIE ENDOCRINE: {', '.join(patologie_endocrine)}
+REGIME ALIMENTARE: {regime}
+CIBI DA ESCLUDERE (Gusti personali): {cibi_no}
+PATOLOGIE: {', '.join(patologie_metaboliche + patologie_gastro + patologie_endocrine)}
 ALLERGIE: {allergie}
 OBIETTIVO: {obiettivo}
 
@@ -240,13 +259,14 @@ ESAMI DEL SANGUE:
 ISTRUZIONI_MASTER = f"""
 RUOLO: Nutrizionista Clinico Esperto.
 BIBLIOTECA: {CONTESTO_BIBLIOTECA}
-DATI PAZIENTE: {PROFILO_PAZIENTE}
+DATI PAZIENTE: 
+{PROFILO_PAZIENTE}
 
 TASK:
-1. Analizza esami e patologie.
-2. Crea una strategia nutrizionale basata sui protocolli.
-3. IMPORTANTE: Usa TABELLE Markdown per schemi dietetici o liste di alimenti (Es. | Colazione | Pranzo | Cena |).
-4. Sii schematico e professionale.
+1. Analizza il quadro clinico incrociando patologie, esami e REGIME ALIMENTARE ({regime}).
+2. Rispetta tassativamente i CIBI DA ESCLUDERE: {cibi_no}.
+3. Crea un piano o un commento clinico basato SOLO sulla biblioteca.
+4. IMPORTANTE PER IL LAYOUT: Usa tabelle Markdown (| Colonna 1 | Colonna 2 |) per le diete. Verranno convertite in tabelle professionali nel PDF.
 """
 
 # --- 9. CHAT & OUTPUT ---
@@ -257,13 +277,13 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-if prompt := st.chat_input("Scrivi qui... (Es: 'Genera piano settimanale')"):
+if prompt := st.chat_input("Es: 'Genera dieta settimanale in tabella'"):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        with st.spinner("Generazione Report Clinico..."):
+        with st.spinner("Elaborazione piano clinico..."):
             try:
                 chat_history = []
                 for msg in st.session_state.messages:
@@ -282,18 +302,14 @@ if prompt := st.chat_input("Scrivi qui... (Es: 'Genera piano settimanale')"):
                 st.markdown(response.text)
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
                 
-                # Generazione PDF HTML
+                # PDF
                 pdf_bytes = crea_pdf_html(PROFILO_PAZIENTE, response.text)
-                
                 if pdf_bytes:
                     st.download_button(
-                        "🖨️ Scarica Report Ufficiale (PDF)",
+                        "🖨️ Scarica Report PDF (Stile Clinico)",
                         data=pdf_bytes,
-                        file_name="Report_Clinico_NutriAI.pdf",
+                        file_name="Piano_Nutrizionale.pdf",
                         mime="application/pdf"
                     )
-                else:
-                    st.error("Errore nella generazione del PDF.")
-
             except Exception as e:
                 st.error(f"Errore: {e}")
