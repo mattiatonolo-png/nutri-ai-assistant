@@ -318,9 +318,9 @@ TASK OPERATIVO:
 1. Analizza il caso clinico applicando la gerarchia (Livello 1 -> 2 -> 3).
 2. Genera un output strutturato (Analisi Clinica -> Strategia Nutrizionale -> Esempio Pratico).
 3. IMPORTANTE: Usa Tabelle Markdown per schemi dietetici.
-"""
-PORTANTE PER IL LAYOUT: Usa tabelle Markdown (| Colonna 1 | Colonna 2 |) per le diete. Verranno convertite in tabelle professionali nel PDF.
 
+IMPORTANTE PER IL LAYOUT: Usa tabelle Markdown (| Colonna 1 | Colonna 2 |) per le diete. Verranno convertite in tabelle professionali nel PDF.
+"""
 
 # --- 9. CHAT & OUTPUT ---
 if "messages" not in st.session_state:
