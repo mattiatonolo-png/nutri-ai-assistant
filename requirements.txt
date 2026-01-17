@@ -4,3 +4,5 @@ pypdf
 cryptography
 fpdf
 pandas
+xhtml2pdf
+markdown
