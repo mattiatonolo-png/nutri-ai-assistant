@@ -158,7 +158,7 @@ if prompt := st.chat_input("Scrivi qui (es: 'Genera una giornata tipo' o 'Quante
 
                 # Chiamata all'AI
                 response = client.models.generate_content(
-                    model= "gemini-1.5-flash-latest", # Modello veloce e capace
+                    model="gemini-flash-latest", # Modello veloce e capace
                     contents=chat_history_gemini,
                     config=types.GenerateContentConfig(
                         system_instruction=ISTRUZIONI_MASTER,
