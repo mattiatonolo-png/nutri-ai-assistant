@@ -42,6 +42,39 @@ def crea_pdf_download(paziente_txt, dieta_txt):
     
     # Restituisce il file come stringa di byte (pronto per il download)
     return pdf.output(dest='S').encode('latin-1')
+    
+    # --- SISTEMA DI LOGIN ---
+def check_password():
+    """Ritorna True se l'utente è loggato, altrimenti mostra il form."""
+    # Inizializza lo stato della sessione
+    if "authenticated" not in st.session_state:
+        st.session_state.authenticated = False
+
+    # Se è già autenticato, procedi
+    if st.session_state.authenticated:
+        return True
+
+    # Mostra interfaccia di login
+    st.title("🔒 Accesso Riservato")
+    password_input = st.text_input("Inserisci la password per accedere", type="password")
+
+    if st.button("Accedi"):
+        try:
+            # Controlla la password nei Secrets
+            if password_input == st.secrets["APP_PASSWORD"]:
+                st.session_state.authenticated = True
+                st.rerun()  # Ricarica la pagina per mostrare l'app
+            else:
+                st.error("Password errata.")
+        except KeyError:
+            st.error("ERRORE: La password non è stata impostata nei Secrets di Streamlit!")
+
+    return False
+
+# BLOCCO: Se il login non è avvenuto, ferma tutto il codice qui sotto.
+if not check_password():
+    st.stop()
+
 # --- 1. CONFIGURAZIONE PAGINA ---
 st.set_page_config(page_title="Nutri-AI Clinical", page_icon="🩺", layout="wide")
 
