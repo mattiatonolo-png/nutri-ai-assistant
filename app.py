@@ -4,11 +4,10 @@ from pypdf import PdfReader
 from google import genai
 from google.genai import types
 
-# --- CONFIGURAZIONE ---
-st.set_page_config(page_title="Nutri-AI Biblioteca", page_icon="📚", layout="wide")
-st.title("📚 Nutri-AI: Clinical RAG System (Multi-Source)")
+# --- 1. CONFIGURAZIONE PAGINA ---
+st.set_page_config(page_title="Nutri-AI Clinical", page_icon="🩺", layout="wide")
 
-# --- NASCONDI ELEMENTI DI STREAMLIT (Menu, Footer, Header) ---
+# Nascondiamo menu e footer per aspetto professionale
 hide_st_style = """
             <style>
             #MainMenu {visibility: hidden;}
@@ -17,142 +16,161 @@ hide_st_style = """
             </style>
             """
 st.markdown(hide_st_style, unsafe_allow_html=True)
-# --- FUNZIONE PER LEGGERE TUTTI I PDF ---
 
-def carica_biblioteca(cartella):
-    """Legge tutti i PDF in una cartella e unisce i testi."""
-    testo_totale = ""
-    elenco_file = []
-    
-    # Verifica se la cartella esiste
-    if not os.path.exists(cartella):
-        os.makedirs(cartella) # La crea se non c'è
-        return None, []
+st.title("🩺 Nutri-AI: Assistente Clinico Avanzato")
+st.markdown("Sistema di supporto decisionale basato su protocolli SINU/LARN.")
 
-    # Scansiona i file
-    files = os.listdir(cartella)
-    files_pdf = [f for f in files if f.endswith('.pdf')]
-    
-    if not files_pdf:
-        return None, []
-
-    # Barra di caricamento visiva
-    progresso = st.progress(0, text="Inizializzazione lettura documenti...")
-    
-    for i, file_name in enumerate(files_pdf):
-        percorso = os.path.join(cartella, file_name)
-        try:
-            reader = PdfReader(percorso)
-            testo_file = f"\n--- INIZIO FILE: {file_name} ---\n"
-            for page in reader.pages:
-                estratto = page.extract_text()
-                if estratto:
-                    testo_file += estratto + "\n"
-            testo_file += f"\n--- FINE FILE: {file_name} ---\n"
-            
-            testo_totale += testo_file
-            elenco_file.append(file_name)
-            
-            # Aggiorna barra
-            percentuale = int((i + 1) / len(files_pdf) * 100)
-            progresso.progress(percentuale, text=f"Letto: {file_name}")
-            
-        except Exception as e:
-            st.error(f"Errore su {file_name}: {e}")
-            
-    progresso.empty() # Rimuove la barra alla fine
-    return testo_totale, elenco_file
-
-# --- CARICAMENTO DELLA CONOSCENZA ---
-CARTELLA_DOCS = "documenti"
-CONTESTO_BIBLIOTECA, LISTA_FILE = carica_biblioteca(CARTELLA_DOCS)
-
-# --- SIDEBAR: STATO SISTEMA ---
-with st.sidebar:
-    st.header("🗂️ Biblioteca Scientifica")
-    if LISTA_FILE:
-        st.success(f"Caricati {len(LISTA_FILE)} documenti.")
-        st.markdown("### Fonti attive:")
-        for f in LISTA_FILE:
-            st.markdown(f"- 📄 *{f}*")
-        
-        # Mostra quanti caratteri totali ha letto
-        st.caption(f"Totale dati: {len(CONTESTO_BIBLIOTECA)} caratteri")
-    else:
-        st.warning("⚠️ Nessun PDF trovato.")
-        st.info("Metti i file nella cartella 'documenti'.")
-
-# --- SETUP AI ---
-# INSERISCI LA TUA CHIAVE QUI SOTTO
-# La chiave viene presa dai "Secrets" di Streamlit (la cassaforte)
+# --- 2. GESTIONE CHIAVE API (SECRETS) ---
 try:
+    # Cerca la chiave nella "Cassaforte" di Streamlit Cloud
     LA_MIA_API_KEY = st.secrets["GOOGLE_API_KEY"]
 except:
-    st.error("Chiave API non trovata. Impostala nei Secrets.")
+    # Se siamo sul Mac e non abbiamo impostato secrets.toml, usiamo un fallback o errore
+    # Togli il commento qui sotto e metti la chiave se lo usi in locale sul Mac:
+    # LA_MIA_API_KEY = "AIzaSy....." 
+    st.error("Chiave API mancante. Impostala nei Secrets di Streamlit.")
     st.stop()
 
 client = genai.Client(api_key=LA_MIA_API_KEY)
 
-# Prompt Avanzato per gestire fonti multiple
-ISTRUZIONI_BASE = """
-Sei un Senior Clinical Assistant. Hai accesso a una biblioteca di documenti scientifici (qui sotto).
-Il tuo compito è rispondere alle domande incrociando le informazioni dai vari documenti.
+# --- 3. CARICAMENTO BIBLIOTECA (Tutti i PDF) ---
+@st.cache_resource # Questo comando fa sì che legga i PDF una volta sola e non a ogni click!
+def carica_biblioteca():
+    cartella = "documenti"
+    testo_totale = ""
+    lista_fonti = []
+    
+    if not os.path.exists(cartella):
+        os.makedirs(cartella)
+        return None, []
 
-REGOLE DI RISPOSTA:
-1.  **CITA LA FONTE:** Se l'info viene dal "File X", dillo (es. "Secondo le tabelle LARN...").
-2.  **GERARCHIA:** Se c'è conflitto, dai priorità ai documenti SINU/LARN 2025.
-3.  **PRECISIONE:** Usa i numeri esatti trovati nei testi.
-4.  **LIMITI:** Se l'info non esiste in NESSUN documento, dillo chiaramente.
+    files = [f for f in os.listdir(cartella) if f.endswith('.pdf')]
+    
+    if not files:
+        return None, []
 
---- INIZIO BIBLIOTECA ---
+    for file_name in files:
+        percorso = os.path.join(cartella, file_name)
+        try:
+            reader = PdfReader(percorso)
+            testo_file = f"\n--- FONTE: {file_name} ---\n"
+            for page in reader.pages:
+                t = page.extract_text()
+                if t: testo_file += t + "\n"
+            testo_totale += testo_file
+            lista_fonti.append(file_name)
+        except:
+            pass
+            
+    return testo_totale, lista_fonti
+
+CONTESTO_BIBLIOTECA, LISTA_FILE = carica_biblioteca()
+
+# --- 4. SIDEBAR: CARTELLA CLINICA (Input Dati) ---
+with st.sidebar:
+    st.header("📋 Dati Paziente")
+    
+    # Input strutturati
+    sesso = st.selectbox("Sesso", ["Uomo", "Donna", "Altro"])
+    eta = st.number_input("Età", min_value=0, max_value=120, value=30)
+    peso = st.number_input("Peso (kg)", min_value=0, value=70)
+    altezza = st.number_input("Altezza (cm)", min_value=0, value=170)
+    
+    st.divider()
+    
+    st.subheader("Quadro Clinico")
+    patologie = st.multiselect(
+        "Patologie/Condizioni",
+        ["Nessuna", "Diabete T2", "Ipertensione", "Colesterolo Alto", "Gravidanza", "Celiachia", "Sportivo Agonista"]
+    )
+    
+    allergie = st.text_input("Allergie/Intolleranze", placeholder="Es. Lattosio, Nichel...")
+    
+    obiettivo = st.selectbox(
+        "Obiettivo", 
+        ["Mantenimento", "Perdita Peso", "Aumento Massa", "Gestione Patologia"]
+    )
+    
+    # Creiamo una stringa che riassume il paziente
+    PROFILO_PAZIENTE = f"""
+    DATI PAZIENTE:
+    - Sesso: {sesso}
+    - Età: {eta} anni
+    - Peso: {peso} kg
+    - Altezza: {altezza} cm
+    - Patologie: {', '.join(patologie)}
+    - Allergie: {allergie}
+    - Obiettivo: {obiettivo}
+    """
+    
+    st.info(f"📚 Fonti attive: {len(LISTA_FILE) if LISTA_FILE else 0}")
+    if st.button("🗑️ Cancella Chat"):
+        st.session_state.messages = []
+        st.rerun()
+
+# --- 5. IL CERVELLO (SYSTEM PROMPT DINAMICO) ---
+# Qui uniamo: Ruolo + Dati Paziente + Libri letti
+ISTRUZIONI_MASTER = f"""
+RUOLO: Sei un Assistente Nutrizionista Clinico Esperto basato su evidenze scientifiche.
+
+{PROFILO_PAZIENTE}
+
+BIBLIOTECA SCIENTIFICA DI RIFERIMENTO:
+{CONTESTO_BIBLIOTECA if CONTESTO_BIBLIOTECA else "Nessun documento caricato."}
+
+REGOLE FONDAMENTALI:
+1. Analizza la richiesta dell'utente incrociandola con i DATI PAZIENTE (es. se iperteso, controlla il sodio nei documenti).
+2. Usa ESCLUSIVAMENTE le informazioni presenti nella BIBLIOTECA per dare raccomandazioni nutrizionali.
+3. Se un'informazione manca nei documenti, dillo.
+4. Tono professionale, empatico e sintetico.
+5. Usa elenchi puntati e tabelle per la dieta.
 """
 
-if CONTESTO_BIBLIOTECA:
-    SYSTEM_PROMPT_COMPLETO = ISTRUZIONI_BASE + CONTESTO_BIBLIOTECA + "\n--- FINE BIBLIOTECA ---"
-else:
-    SYSTEM_PROMPT_COMPLETO = ISTRUZIONI_BASE + "NESSUN DOCUMENTO."
-
-# --- CHAT INTERFACE ---
+# --- 6. GESTIONE CHAT ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Header della chat
-st.divider()
-
+# Mostra messaggi precedenti
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-if prompt := st.chat_input("Chiedi qualcosa alla tua biblioteca scientifica..."):
+# Input Utente
+if prompt := st.chat_input("Scrivi qui (es: 'Genera una giornata tipo' o 'Quante proteine servono?')"):
     
+    # Aggiungi input utente alla storia
+    st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
-    st.session_state.messages.append({"role": "user", "content": prompt})
 
+    # Genera risposta
     with st.chat_message("assistant"):
-        with st.spinner("Consultazione incrociata documenti..."):
+        with st.spinner("Elaborazione piano clinico..."):
             try:
-                # Preparazione storia
-                chat_history = []
+                # Prepara la storia per Gemini
+                chat_history_gemini = []
                 for msg in st.session_state.messages:
-                    role_gemini = "model" if msg["role"] == "assistant" else "user"
-                    chat_history.append(types.Content(
-                        role=role_gemini, 
+                    role = "user" if msg["role"] == "user" else "model"
+                    chat_history_gemini.append(types.Content(
+                        role=role, 
                         parts=[types.Part(text=msg["content"])]
                     ))
 
-                # Chiamata
+                # Chiamata all'AI
                 response = client.models.generate_content(
-                    model="gemini-flash-latest",
-                    contents=chat_history,
+                    model="gemini-1.5-flash", # Modello veloce e capace
+                    contents=chat_history_gemini,
                     config=types.GenerateContentConfig(
-                        system_instruction=SYSTEM_PROMPT_COMPLETO,
-                        temperature=0.2 # Bassa creatività, alta fedeltà
+                        system_instruction=ISTRUZIONI_MASTER,
+                        temperature=0.3 # Bassa creatività per rigore scientifico
                     )
                 )
                 
-                st.markdown(response.text)
-                st.session_state.messages.append({"role": "assistant", "content": response.text})
+                output_text = response.text
+                st.markdown(output_text)
+                
+                # Salva risposta nella storia
+                st.session_state.messages.append({"role": "assistant", "content": output_text})
 
             except Exception as e:
-                st.error(f"Errore AI: {e}")
+                st.error(f"Errore di generazione: {e}")
