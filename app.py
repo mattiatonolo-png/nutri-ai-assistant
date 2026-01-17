@@ -206,7 +206,14 @@ if prompt := st.chat_input("Scrivi qui (es: 'Genera una giornata tipo' o 'Quante
                 
                 output_text = response.text
                 st.markdown(output_text)
-                
+
+                # --- BLOCCO DOWNLOAD PDF ---
+                st.download_button(
+                    label="🖨️ Scarica Report PDF",
+                    data=crea_pdf_download(PROFILO_PAZIENTE, output_text),
+                    file_name="piano_nutrizionale.pdf",
+                    mime="application/pdf"
+                )
                 # Salva risposta nella storia
                 st.session_state.messages.append({"role": "assistant", "content": output_text})
 
