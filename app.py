@@ -95,15 +95,13 @@ def gestisci_indice_vettoriale():
     embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=LA_MIA_API_KEY)
     
     # --- STRATEGIA A: CARICAMENTO DA DISCO (Fast Boot) ---
-    # Se hai caricato la cartella 'faiss_index_store' su GitHub, entra qui.
     if os.path.exists(cartella_index):
         try:
-            # allow_dangerous_deserialization=True serve per fidarsi dei propri file locali
             vector_store = FAISS.load_local(cartella_index, embeddings, allow_dangerous_deserialization=True)
             files_presenti = len(os.listdir(cartella_docs)) if os.path.exists(cartella_docs) else 0
             return vector_store, files_presenti, "⚡ Memoria Persistente (GitHub/Locale)"
         except Exception:
-            pass # Se fallisce, passa alla ricostruzione
+            pass 
     
     # --- STRATEGIA B: RICOSTRUZIONE (Slow Boot) ---
     if not os.path.exists(cartella_docs): return None, 0, "⚠️ Cartella Documenti Assente"
@@ -126,7 +124,6 @@ def gestisci_indice_vettoriale():
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=200)
     splits = text_splitter.split_documents(docs)
 
-    # Batching per evitare Error 429
     vector_store = None
     batch_size = 10
     total_chunks = len(splits)
@@ -139,7 +136,7 @@ def gestisci_indice_vettoriale():
                 vector_store = FAISS.from_documents(batch, embeddings)
             else:
                 vector_store.add_documents(batch)
-            time.sleep(1.5) # Pausa anti-blocco
+            time.sleep(1.5)
             my_bar.progress(min(1.0, (i+batch_size)/total_chunks))
         except Exception:
             time.sleep(5)
@@ -147,7 +144,6 @@ def gestisci_indice_vettoriale():
             
     my_bar.empty()
     
-    # Salva su disco (per la sessione corrente)
     if vector_store:
         vector_store.save_local(cartella_index)
         
@@ -178,7 +174,7 @@ with st.sidebar:
 
     st.divider()
     
-    # --- ADMIN TOOLS POTENZIATI ---
+    # --- ADMIN TOOLS POTENZIATI (MIRINO LASER) ---
     with st.expander("🛠️ Admin & Debug Tools", expanded=False):
         st.info(f"Stato Memoria: {STATUS_MSG}")
         
@@ -197,103 +193,15 @@ with st.sidebar:
                     st.download_button("💾 Download ZIP", data=fp, file_name="faiss_index_store.zip", mime="application/zip", use_container_width=True)
         
         st.divider()
-       st.divider()
         st.write("🕵️‍♂️ **File Inspector (Mirino Laser)**")
         
         if os.path.exists("documenti"):
             files_in_folder = [f for f in os.listdir("documenti") if f.endswith('.pdf')]
             sel_file = st.selectbox("Seleziona File:", files_in_folder)
             
-            # Leggiamo il file per sapere quante pagine ha
             try:
                 path = os.path.join("documenti", sel_file)
                 reader = PdfReader(path)
                 num_pages = len(reader.pages)
                 
-                st.info(f"Il file ha {num_pages} pagine.")
-                
-                # SELETTORE DI PAGINA
-                page_num = st.number_input("Quale pagina vuoi analizzare?", min_value=1, max_value=num_pages, value=1)
-                
-                if st.button(f"🔍 Analizza Pagina {page_num}"):
-                    # Estrae solo la pagina richiesta (ricorda: informatica parte da 0)
-                    page_content = reader.pages[page_num - 1].extract_text()
-                    
-                    st.markdown(f"**Contenuto Grezzo Pagina {page_num}:**")
-                    if not page_content:
-                        st.error("PAGINA BIANCA O IMMAGINE")
-                    else:
-                        st.code(page_content, language="markdown")
-                        st.caption("⚠️ Controlla qui sopra: se è una tabella, le colonne sono allineate o i numeri sono mischiati?")
-            
-            except Exception as e:
-                st.error(f"Errore lettura file: {e}")
-                
-        st.divider()
-        st.write("🧠 **Vector Search Debug**")
-        q_test = st.text_input("Cerca concetto (es. 'Ferro')")
-        if q_test and VECTOR_STORE:
-            res = VECTOR_STORE.similarity_search(q_test, k=2)
-            for i, d in enumerate(res):
-                st.caption(f"Fonte: {d.metadata.get('source')}")
-                st.code(d.page_content, language="markdown")
-
-# =========================================================
-# 5. APP PRINCIPALE
-# =========================================================
-st.title("🩺 Nutri-AI: Clinical Assistant v7.0")
-
-st.subheader("🩸 Esami Ematici")
-col_sx, col_dx = st.columns([2, 1])
-with col_sx:
-    esami_df = st.data_editor(pd.DataFrame([{"Esame": "Glucosio", "Valore": 90, "Unità": "mg/dL"}, {"Esame": "Colesterolo", "Valore": 180, "Unità": "mg/dL"}]), num_rows="dynamic", use_container_width=True)
-with col_dx:
-    if VECTOR_STORE: st.success(f"📚 {NUM_FILES} Documenti Attivi")
-    else: st.error("❌ Nessuna fonte caricata")
-
-PROFILO = f"Paziente: {sesso}, {eta}anni, {peso}kg. Dieta: {regime}. No: {cibi_no}. Patologie: {metaboliche}, {gastro}. Obiettivo: {obiettivo}.\nEsami:\n{esami_df.to_string(index=False)}"
-
-if "messages" not in st.session_state: st.session_state.messages = []
-for m in st.session_state.messages:
-    with st.chat_message(m["role"]): st.markdown(m["content"])
-
-if prompt := st.chat_input("Scrivi qui la tua richiesta..."):
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"): st.markdown(prompt)
-
-    with st.chat_message("assistant"):
-        with st.spinner("Consultazione biblioteca scientifica..."):
-            try:
-                # Retrieval Arricchito
-                q_aug = f"{prompt} {', '.join(metaboliche)} {', '.join(gastro)} {obiettivo}"
-                docs = VECTOR_STORE.similarity_search(q_aug, k=5) if VECTOR_STORE else []
-                context = "\n".join([f"FONTE {d.metadata.get('source')}: {d.page_content}" for d in docs]) or "Nessuna fonte specifica trovata."
-
-                ISTRUZIONI = f"""
-                RUOLO: Nutrizionista Clinico (Evidence-Based).
-                
-                BIBLIOTECA (Usa SOLO queste fonti):
-                {context}
-                
-                PAZIENTE:
-                {PROFILO}
-                
-                MANDATORY RULES:
-                1. CHECK SICUREZZA: Panic Values (es. Potassio <2.5) -> PS. Celiachia -> No Glutine.
-                2. CLINICA: Diabete (Low GI, <15% zuccheri), IBS (Low-FODMAP).
-                3. FORMAT: Usa tabelle Markdown (| A | B |) per le diete.
-                """
-                
-                resp = client.models.generate_content(
-                    model="gemini-flash-latest",
-                    contents=[types.Content(role="user", parts=[types.Part(text=prompt)])],
-                    config=types.GenerateContentConfig(system_instruction=ISTRUZIONI, temperature=0.3)
-                )
-                
-                st.markdown(resp.text)
-                st.session_state.messages.append({"role": "assistant", "content": resp.text})
-                
-                pdf = crea_pdf_html(PROFILO, resp.text)
-                if pdf: st.download_button("🖨️ Scarica PDF", data=pdf, file_name="Piano.pdf", mime="application/pdf")
-            
-            except Exception as e: st.error(f"Errore: {e}")
+                st.caption(f"Pagine totali: {num
