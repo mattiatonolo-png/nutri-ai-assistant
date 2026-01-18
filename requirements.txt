@@ -1,11 +1,10 @@
+langchain
+langchain-community
+langchain-google-genai
+faiss-cpu
 streamlit
 google-genai
 pypdf
 pandas
-xhtml2pdf
 markdown
-langchain
-langchain-google-genai
-langchain-community
-faiss-cpu
-cryptography
+xhtml2pdf
