@@ -6,3 +6,7 @@ fpdf
 pandas
 xhtml2pdf
 markdown
+langchain
+langchain-google-genai
+langchain-community
+faiss-cpu
