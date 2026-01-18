@@ -197,24 +197,38 @@ with st.sidebar:
                     st.download_button("💾 Download ZIP", data=fp, file_name="faiss_index_store.zip", mime="application/zip", use_container_width=True)
         
         st.divider()
-        st.write("🕵️‍♂️ **File Inspector (Raggi X)**")
+       st.divider()
+        st.write("🕵️‍♂️ **File Inspector (Mirino Laser)**")
         
         if os.path.exists("documenti"):
             files_in_folder = [f for f in os.listdir("documenti") if f.endswith('.pdf')]
-            sel_file = st.selectbox("Seleziona File da analizzare:", files_in_folder)
+            sel_file = st.selectbox("Seleziona File:", files_in_folder)
             
-            if st.button("🔍 Analizza Testo Grezzo"):
-                try:
-                    p = os.path.join("documenti", sel_file)
-                    r = PdfReader(p)
-                    txt = ""
-                    for i in range(min(3, len(r.pages))):
-                        txt += f"\n--- PAGINA {i+1} ---\n{r.pages[i].extract_text() or '[VUOTO/IMMAGINE]'}\n"
+            # Leggiamo il file per sapere quante pagine ha
+            try:
+                path = os.path.join("documenti", sel_file)
+                reader = PdfReader(path)
+                num_pages = len(reader.pages)
+                
+                st.info(f"Il file ha {num_pages} pagine.")
+                
+                # SELETTORE DI PAGINA
+                page_num = st.number_input("Quale pagina vuoi analizzare?", min_value=1, max_value=num_pages, value=1)
+                
+                if st.button(f"🔍 Analizza Pagina {page_num}"):
+                    # Estrae solo la pagina richiesta (ricorda: informatica parte da 0)
+                    page_content = reader.pages[page_num - 1].extract_text()
                     
-                    if len(txt) < 50: st.error("🚨 FILE NON LEGGIBILE (Scansione?)")
-                    else: st.code(txt, language="markdown")
-                except Exception as e: st.error(f"Errore: {e}")
-
+                    st.markdown(f"**Contenuto Grezzo Pagina {page_num}:**")
+                    if not page_content:
+                        st.error("PAGINA BIANCA O IMMAGINE")
+                    else:
+                        st.code(page_content, language="markdown")
+                        st.caption("⚠️ Controlla qui sopra: se è una tabella, le colonne sono allineate o i numeri sono mischiati?")
+            
+            except Exception as e:
+                st.error(f"Errore lettura file: {e}")
+                
         st.divider()
         st.write("🧠 **Vector Search Debug**")
         q_test = st.text_input("Cerca concetto (es. 'Ferro')")
