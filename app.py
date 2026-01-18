@@ -8,10 +8,15 @@ from xhtml2pdf import pisa
 import markdown
 
 # --- LIBRERIE RAG (MOTORE VETTORIALE) ---
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+# Usiamo il try-except per gestire sia le versioni vecchie che nuove di LangChain
+try:
+    from langchain.text_splitter import RecursiveCharacterTextSplitter
+except ImportError:
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
+
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores import FAISS
-from langchain.docstore.document import Document
+from langchain_community.docstore.document import Document
 
 # --- 1. CONFIGURAZIONE PAGINA ---
 st.set_page_config(page_title="Nutri-AI Clinical", page_icon="🩺", layout="wide")
