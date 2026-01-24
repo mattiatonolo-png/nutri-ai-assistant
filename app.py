@@ -3,8 +3,8 @@ import os
 import pandas as pd
 import time
 import shutil
-import json # <--- NUOVO
-import re   # <--- NUOVO
+import json
+import re
 from pypdf import PdfReader
 from google import genai
 from google.genai import types
@@ -22,7 +22,6 @@ from langchain_community.vectorstores import FAISS
 from langchain_community.docstore.document import Document
 
 # --- IMPORT LOGICA MEAL PLANNER ---
-# Assicurati che meal_planner_logic.py sia nella stessa cartella
 import meal_planner_logic as mpl 
 
 # =========================================================
@@ -74,7 +73,6 @@ def crea_pdf_html(dati_paziente, testo_ai):
     html_ai = markdown.markdown(testo_ai, extensions=['tables'])
     html_paziente = dati_paziente.replace("\n", "<br>")
     
-    # CSS Separato per evitare errori di sintassi f-string
     css_style = """
         @page {
             size: A4;
@@ -142,7 +140,6 @@ def gestisci_indice_vettoriale():
     
     embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=LA_MIA_API_KEY)
     
-    # --- STRATEGIA A: CARICAMENTO DA DISCO (Fast Boot) ---
     if os.path.exists(cartella_index):
         try:
             vector_store = FAISS.load_local(cartella_index, embeddings, allow_dangerous_deserialization=True)
@@ -151,7 +148,6 @@ def gestisci_indice_vettoriale():
         except Exception:
             pass 
     
-    # --- STRATEGIA B: RICOSTRUZIONE (Slow Boot) ---
     if not os.path.exists(cartella_docs):
         return None, 0, "⚠️ Cartella Documenti Assente"
     
@@ -202,41 +198,42 @@ def gestisci_indice_vettoriale():
 VECTOR_STORE, NUM_FILES, STATUS_MSG = gestisci_indice_vettoriale()
 
 # =========================================================
-# 4. FUNZIONI HELPER (NUOVA SEZIONE)
+# 4. FUNZIONI HELPER & PARSING
 # =========================================================
 
 def estrai_piano_in_json(testo_ai):
     """
-    Usa l'AI per convertire il testo libero in JSON strutturato
-    comprensibile dal Meal Planner.
+    Funzione robusta per estrarre JSON dall'AI.
     """
     prompt_parser = f"""
-    Analizza il seguente piano alimentare e estrai gli ingredienti in formato JSON.
+    Analizza il testo e estrai gli ingredienti in JSON.
+    Regole:
+    1. Restituisci SOLO una lista JSON valida [{{...}}, {{...}}].
+    2. Non aggiungere testo prima o dopo.
+    3. Usa chiavi: "day" (es. Lunedì), "meal", "food", "grams".
     
-    PIANO:
+    TESTO:
     {testo_ai}
-    
-    OUTPUT:
-    Restituisci SOLO una lista di oggetti JSON. Nessun markdown, nessun commento.
-    Struttura richiesta per ogni oggetto:
-    {{
-        "day": "Lunedì", "Martedì", etc. (Se generico usa "Lunedì")
-        "meal": "Colazione", "Pranzo", "Cena", "Spuntino Mattina", "Spuntino Pomeriggio"
-        "food": "Nome alimento pulito" (es. "Pasta integrale" non "80g pasta")
-        "grams": numero intero (es. 80). Se non specificato stima una porzione standard.
-    }}
     """
     try:
+        # Usa temperature 0 per massima precisione deterministica
         resp = client.models.generate_content(
             model="gemini-flash-latest",
             contents=[types.Content(role="user", parts=[types.Part(text=prompt_parser)])],
-            config=types.GenerateContentConfig(temperature=0.1)
+            config=types.GenerateContentConfig(temperature=0.0)
         )
         
-        # Pulizia testo grezzo (rimuove backticks se presenti)
-        clean_text = resp.text.replace("```json", "").replace("```", "").strip()
-        return json.loads(clean_text)
+        text = resp.text.strip()
+        # Pulizia backticks
+        if "```json" in text:
+            text = text.split("```json")[1].split("```")[0]
+        elif "```" in text:
+            text = text.split("```")[0]
+            
+        return json.loads(text.strip())
     except Exception as e:
+        # Stampa errore in console per debug
+        print(f"Errore parsing: {e}")
         return None
 
 # =========================================================
@@ -244,8 +241,6 @@ def estrai_piano_in_json(testo_ai):
 # =========================================================
 with st.sidebar:
     st.header("📋 Anamnesi")
-    
-    # Link rapido al Meal Planner
     st.info("👉 **Vai al Meal Planner** nella sidebar a sinistra per vedere il piano strutturato.")
     
     with st.expander("Dati Paziente", expanded=True):
@@ -266,10 +261,8 @@ with st.sidebar:
 
     st.divider()
     
-    # --- ADMIN TOOLS ---
     with st.expander("🛠️ Admin & Debug Tools", expanded=False):
         st.info(f"Stato Memoria: {STATUS_MSG}")
-        
         c1, c2 = st.columns(2)
         with c1:
             if st.button("🔄 Ricostruisci", use_container_width=True):
@@ -286,43 +279,21 @@ with st.sidebar:
                     st.download_button("💾 Download ZIP", data=fp, file_name="faiss_index_store.zip", mime="application/zip", use_container_width=True)
         
         st.divider()
-        st.write("🕵️‍♂️ **File Inspector (Mirino Laser)**")
-        
+        st.write("🕵️‍♂️ **File Inspector**")
         if os.path.exists("documenti"):
             files_in_folder = [f for f in os.listdir("documenti") if f.endswith('.pdf')]
             sel_file = st.selectbox("Seleziona File:", files_in_folder)
-            
-            try:
-                path = os.path.join("documenti", sel_file)
-                reader = PdfReader(path)
-                num_pages = len(reader.pages)
-                
-                st.caption(f"Pagine totali: {num_pages}")
-                page_num = st.number_input("Pagina da analizzare:", min_value=1, max_value=num_pages, value=1)
-                
-                if st.button(f"🔍 Analizza Pagina {page_num}"):
-                    content = reader.pages[page_num - 1].extract_text()
-                    st.markdown(f"**Testo Grezzo Pagina {page_num}:**")
-                    if not content:
-                        st.error("🚨 PAGINA BIANCA / IMMAGINE")
-                    else:
-                        st.code(content, language="markdown")
-            except Exception as e:
-                st.error(f"Errore lettura: {e}")
-
-        st.divider()
-        st.write("🧠 **Vector Search Debug**")
-        q_test = st.text_input("Cerca concetto (es. 'Ferro')")
-        if q_test and VECTOR_STORE:
-            res = VECTOR_STORE.similarity_search(q_test, k=2)
-            for i, d in enumerate(res):
-                st.caption(f"Fonte: {d.metadata.get('source')}")
-                st.code(d.page_content, language="markdown")
+            if st.button("🔍 Analizza Pagina 1"):
+                try:
+                    path = os.path.join("documenti", sel_file)
+                    reader = PdfReader(path)
+                    st.code(reader.pages[0].extract_text(), language="markdown")
+                except Exception as e: st.error(str(e))
 
 # =========================================================
 # 6. APP PRINCIPALE
 # =========================================================
-st.title("🩺 Nutri-AI: Clinical Assistant v7.5")
+st.title("🩺 Nutri-AI: Clinical Assistant v7.6")
 
 st.subheader("🩸 Esami Ematici")
 col_sx, col_dx = st.columns([2, 1])
@@ -381,7 +352,7 @@ if prompt := st.chat_input("Scrivi qui la tua richiesta..."):
                 st.markdown(resp.text)
                 st.session_state.messages.append({"role": "assistant", "content": resp.text})
                 
-                # --- NUOVO: SEZIONE PULSANTI (PDF + EXPORT) ---
+                # --- PULSANTI AZIONE ---
                 st.markdown("---")
                 btn_col1, btn_col2 = st.columns([1, 1])
                 
@@ -393,23 +364,27 @@ if prompt := st.chat_input("Scrivi qui la tua richiesta..."):
                 
                 # Tasto 2: EXPORT TO MEAL PLANNER
                 with btn_col2:
-                    # Usiamo una chiave unica per evitare errori
                     if st.button("📤 Esporta nel Meal Planner", key=f"exp_{len(st.session_state.messages)}"):
-                        with st.spinner("Sto leggendo il piano e cercando nel Database..."):
-                            # 1. Estrazione JSON
+                        with st.spinner("Elaborazione dati..."):
                             json_plan = estrai_piano_in_json(resp.text)
                             
                             if json_plan:
-                                # 2. Importazione nel Session State
-                                count = mpl.import_ai_plan_to_state(json_plan)
+                                # Chiamata alla logica (Assicurati che meal_planner_logic restituisca 2 valori!)
+                                count, logs = mpl.import_ai_plan_to_state(json_plan)
+                                
+                                # Visualizzazione Logs Debug
+                                with st.expander(f"📝 Dettaglio Importazione ({count} aggiunti)", expanded=True):
+                                    for log in logs:
+                                        if "❌" in log: st.error(log)
+                                        elif "⚠️" in log: st.warning(log)
+                                        else: st.success(log)
                                 
                                 if count > 0:
-                                    st.success(f"✅ Importati {count} alimenti!")
-                                    st.caption("Vai alla pagina **Meal Planner** per modificare.")
+                                    st.toast(f"✅ {count} alimenti aggiunti!", icon="🥗")
                                 else:
-                                    st.warning("Ingredienti trovati nel testo, ma nessuno corrisponde al Database CSV.")
+                                    st.error("Nessun match trovato nel DB.")
                             else:
-                                st.error("Non sono riuscito a strutturare il piano. Riprova.")
+                                st.error("Errore: L'AI non ha generato dati leggibili.")
 
             except Exception as e:
-                st.error(f"Errore: {e}")
+                st.error(f"Errore generale: {e}")
