@@ -205,63 +205,75 @@ def find_closest_food_match(search_term, db_df):
         
     return None
 
+# --- IN SOSTITUZIONE NEL FILE meal_planner_logic.py ---
+
+def normalize_day_name(raw_day):
+    """
+    Cerca di capire a quale giorno della settimana si riferisce la stringa,
+    gestendo errori di accenti, inglese o abbreviazioni.
+    """
+    raw = raw_day.lower().strip()
+    
+    # Mappa flessibile
+    mapping = {
+        "lunedì": "Lunedì", "lunedi": "Lunedì", "monday": "Lunedì", "mon": "Lunedì",
+        "martedì": "Martedì", "martedi": "Martedì", "tuesday": "Martedì", "tue": "Martedì",
+        "mercoledì": "Mercoledì", "mercoledi": "Mercoledì", "wednesday": "Mercoledì", "wed": "Mercoledì",
+        "giovedì": "Giovedì", "giovedi": "Giovedì", "thursday": "Giovedì", "thu": "Giovedì",
+        "venerdì": "Venerdì", "venerdi": "Venerdì", "friday": "Venerdì", "fri": "Venerdì",
+        "sabato": "Sabato", "saturday": "Sabato", "sat": "Sabato",
+        "domenica": "Domenica", "sunday": "Domenica", "sun": "Domenica"
+    }
+    
+    return mapping.get(raw, None)
+
 def import_ai_plan_to_state(ai_json_plan):
     """
-    Prende il JSON generato dall'AI e popola il session_state.
-    ai_json_plan deve essere una lista di dizionari:
-    [
-      {'day': 'Lunedì', 'meal': 'Colazione', 'food': 'Latte soia', 'grams': 200},
-      ...
-    ]
+    Versione Robust: Normalizza i giorni e usa matching tollerante.
     """
-    # Carichiamo il DB
     df_db = load_food_db()
-    if df_db.empty: return False
+    if df_db.empty: return 0, ["Errore: Database vuoto"]
     
-    # Resettiamo il piano attuale (Opzionale: se vuoi sovrascrivere)
+    # Assicuriamo che lo stato esista
     initialize_meal_plan_state()
     
-    # Mappatura nomi pasti AI -> Nomi pasti System
-    # L'AI potrebbe scrivere "Spuntino" e noi abbiamo "Spuntino Mattina". Normalizziamo.
     meal_map = {
-        "colazione": "Colazione",
-        "spuntino mattina": "Spuntino Mattina",
-        "pranzo": "Pranzo",
-        "spuntino pomeriggio": "Spuntino Pomeriggio",
-        "cena": "Cena",
-        "snack": "Spuntino Mattina" # Fallback
+        "colazione": "Colazione", "breakfast": "Colazione",
+        "spuntino mattina": "Spuntino Mattina", "snack 1": "Spuntino Mattina", "merenda mattina": "Spuntino Mattina",
+        "pranzo": "Pranzo", "lunch": "Pranzo",
+        "spuntino pomeriggio": "Spuntino Pomeriggio", "snack 2": "Spuntino Pomeriggio", "merenda": "Spuntino Pomeriggio",
+        "cena": "Cena", "dinner": "Cena"
     }
 
     count_added = 0
+    debug_log = [] # Raccogliamo info per capire cosa succede
     
     for item in ai_json_plan:
-        day = item.get('day', '').capitalize() # Assicura "Lunedì"
-        meal_raw = item.get('meal', '').lower()
+        raw_day = item.get('day', '')
+        day = normalize_day_name(raw_day)
+        
+        if not day:
+            debug_log.append(f"❌ Giorno non riconosciuto: '{raw_day}'")
+            continue
+            
+        raw_meal = item.get('meal', '').lower()
+        target_meal = "Colazione" # Default
+        for key, val in meal_map.items():
+            if key in raw_meal:
+                target_meal = val
+                break
+        
         food_query = item.get('food', '')
         grams = item.get('grams', 100)
         
-        # 1. Trova il Giorno Corretto
-        if day not in DAYS_OF_WEEK:
-            continue # Salta giorni non validi
-            
-        # 2. Trova il Pasto Corretto (Matching approssimativo)
-        target_meal = None
-        for key, val in meal_map.items():
-            if key in meal_raw:
-                target_meal = val
-                break
-        if not target_meal: target_meal = "Colazione" # Default se non capisce
-        
-        # 3. Cerca l'alimento nel CSV
+        # Tentativo di matching
         match_row = find_closest_food_match(food_query, df_db)
         
         if match_row is not None:
-            # 4. Aggiungi usando la funzione che abbiamo già!
             add_food_to_meal(day, target_meal, match_row, grams)
             count_added += 1
+            debug_log.append(f"✅ Aggiunto: {day} | {food_query} -> {match_row['Nome']}")
         else:
-            # Opzionale: Aggiungere un "Placeholder" se non trova l'alimento?
-            # Per ora saltiamo per non sporcare il piano con errori.
-            print(f"Alimento non trovato nel DB: {food_query}")
+            debug_log.append(f"⚠️ Cibo non trovato: '{food_query}'")
             
-    return count_added
+    return count_added, debug_log
