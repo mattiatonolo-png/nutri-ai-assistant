@@ -3,6 +3,8 @@ import os
 import pandas as pd
 import time
 import shutil
+import json # <--- NUOVO
+import re   # <--- NUOVO
 from pypdf import PdfReader
 from google import genai
 from google.genai import types
@@ -19,11 +21,18 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_community.docstore.document import Document
 
+# --- IMPORT LOGICA MEAL PLANNER ---
+# Assicurati che meal_planner_logic.py sia nella stessa cartella
+import meal_planner_logic as mpl 
+
 # =========================================================
 # 1. CONFIGURAZIONE & SICUREZZA
 # =========================================================
 st.set_page_config(page_title="Nutri-AI Clinical", page_icon="🩺", layout="wide")
 st.markdown("""<style>#MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}</style>""", unsafe_allow_html=True)
+
+# --- INIZIALIZZAZIONE STATO MEAL PLANNER ---
+mpl.initialize_meal_plan_state()
 
 def check_password():
     if "authenticated" not in st.session_state:
@@ -136,7 +145,6 @@ def gestisci_indice_vettoriale():
     # --- STRATEGIA A: CARICAMENTO DA DISCO (Fast Boot) ---
     if os.path.exists(cartella_index):
         try:
-            # QUESTO BLOCCO DEVE ESSERE INDENTATO SOTTO IF
             vector_store = FAISS.load_local(cartella_index, embeddings, allow_dangerous_deserialization=True)
             files_presenti = len(os.listdir(cartella_docs)) if os.path.exists(cartella_docs) else 0
             return vector_store, files_presenti, "⚡ Memoria Persistente (GitHub/Locale)"
@@ -194,10 +202,52 @@ def gestisci_indice_vettoriale():
 VECTOR_STORE, NUM_FILES, STATUS_MSG = gestisci_indice_vettoriale()
 
 # =========================================================
-# 4. SIDEBAR & ADMIN TOOLS
+# 4. FUNZIONI HELPER (NUOVA SEZIONE)
+# =========================================================
+
+def estrai_piano_in_json(testo_ai):
+    """
+    Usa l'AI per convertire il testo libero in JSON strutturato
+    comprensibile dal Meal Planner.
+    """
+    prompt_parser = f"""
+    Analizza il seguente piano alimentare e estrai gli ingredienti in formato JSON.
+    
+    PIANO:
+    {testo_ai}
+    
+    OUTPUT:
+    Restituisci SOLO una lista di oggetti JSON. Nessun markdown, nessun commento.
+    Struttura richiesta per ogni oggetto:
+    {{
+        "day": "Lunedì", "Martedì", etc. (Se generico usa "Lunedì")
+        "meal": "Colazione", "Pranzo", "Cena", "Spuntino Mattina", "Spuntino Pomeriggio"
+        "food": "Nome alimento pulito" (es. "Pasta integrale" non "80g pasta")
+        "grams": numero intero (es. 80). Se non specificato stima una porzione standard.
+    }}
+    """
+    try:
+        resp = client.models.generate_content(
+            model="gemini-flash-latest",
+            contents=[types.Content(role="user", parts=[types.Part(text=prompt_parser)])],
+            config=types.GenerateContentConfig(temperature=0.1)
+        )
+        
+        # Pulizia testo grezzo (rimuove backticks se presenti)
+        clean_text = resp.text.replace("```json", "").replace("```", "").strip()
+        return json.loads(clean_text)
+    except Exception as e:
+        return None
+
+# =========================================================
+# 5. SIDEBAR & ADMIN TOOLS
 # =========================================================
 with st.sidebar:
     st.header("📋 Anamnesi")
+    
+    # Link rapido al Meal Planner
+    st.info("👉 **Vai al Meal Planner** nella sidebar a sinistra per vedere il piano strutturato.")
+    
     with st.expander("Dati Paziente", expanded=True):
         col1, col2 = st.columns(2)
         with col1:
@@ -270,9 +320,9 @@ with st.sidebar:
                 st.code(d.page_content, language="markdown")
 
 # =========================================================
-# 5. APP PRINCIPALE
+# 6. APP PRINCIPALE
 # =========================================================
-st.title("🩺 Nutri-AI: Clinical Assistant v7.4")
+st.title("🩺 Nutri-AI: Clinical Assistant v7.5")
 
 st.subheader("🩸 Esami Ematici")
 col_sx, col_dx = st.columns([2, 1])
@@ -327,12 +377,39 @@ if prompt := st.chat_input("Scrivi qui la tua richiesta..."):
                     config=types.GenerateContentConfig(system_instruction=ISTRUZIONI, temperature=0.3)
                 )
                 
+                # Risposta Testuale
                 st.markdown(resp.text)
                 st.session_state.messages.append({"role": "assistant", "content": resp.text})
                 
-                pdf = crea_pdf_html(PROFILO, resp.text)
-                if pdf:
-                    st.download_button("🖨️ Scarica PDF", data=pdf, file_name="Piano.pdf", mime="application/pdf")
-            
+                # --- NUOVO: SEZIONE PULSANTI (PDF + EXPORT) ---
+                st.markdown("---")
+                btn_col1, btn_col2 = st.columns([1, 1])
+                
+                # Tasto 1: PDF
+                with btn_col1:
+                    pdf = crea_pdf_html(PROFILO, resp.text)
+                    if pdf:
+                        st.download_button("🖨️ Scarica PDF", data=pdf, file_name="Piano.pdf", mime="application/pdf", key=f"pdf_{len(st.session_state.messages)}")
+                
+                # Tasto 2: EXPORT TO MEAL PLANNER
+                with btn_col2:
+                    # Usiamo una chiave unica per evitare errori
+                    if st.button("📤 Esporta nel Meal Planner", key=f"exp_{len(st.session_state.messages)}"):
+                        with st.spinner("Sto leggendo il piano e cercando nel Database..."):
+                            # 1. Estrazione JSON
+                            json_plan = estrai_piano_in_json(resp.text)
+                            
+                            if json_plan:
+                                # 2. Importazione nel Session State
+                                count = mpl.import_ai_plan_to_state(json_plan)
+                                
+                                if count > 0:
+                                    st.success(f"✅ Importati {count} alimenti!")
+                                    st.caption("Vai alla pagina **Meal Planner** per modificare.")
+                                else:
+                                    st.warning("Ingredienti trovati nel testo, ma nessuno corrisponde al Database CSV.")
+                            else:
+                                st.error("Non sono riuscito a strutturare il piano. Riprova.")
+
             except Exception as e:
                 st.error(f"Errore: {e}")
