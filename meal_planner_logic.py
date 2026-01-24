@@ -175,3 +175,93 @@ def calculate_daily_totals(day):
                 totals[micro] += food.get(f"{micro}_tot", 0)
             
     return {k: round(v, 1) for k, v in totals.items()}
+
+import difflib
+
+# --- FUNZIONI DI INTEGRAZIONE AI (IMPORT PLAN) ---
+
+def find_closest_food_match(search_term, db_df):
+    """
+    Cerca l'alimento più simile nel DB usando la comparazione di stringhe.
+    Restituisce la riga del DF o None se non trova nulla di decente.
+    """
+    # 1. Creiamo una lista di tutti i nomi nel DB
+    all_names = db_df['Nome'].tolist()
+    
+    # 2. Troviamo il match migliore (cutoff 0.5 significa che deve assomigliare almeno al 50%)
+    matches = difflib.get_close_matches(search_term, all_names, n=1, cutoff=0.5)
+    
+    if matches:
+        best_match_name = matches[0]
+        # Restituisce la riga corrispondente
+        return db_df[db_df['Nome'] == best_match_name].iloc[0]
+    
+    # Tentativo fallback: Cerca se la parola è contenuta (es. "Soia" in "Latte di soia")
+    # Questo aiuta se il fuzzy fallisce
+    search_lower = search_term.lower()
+    mask = db_df['Nome'].str.lower().str.contains(search_lower, regex=False)
+    if mask.any():
+        return db_df[mask].iloc[0]
+        
+    return None
+
+def import_ai_plan_to_state(ai_json_plan):
+    """
+    Prende il JSON generato dall'AI e popola il session_state.
+    ai_json_plan deve essere una lista di dizionari:
+    [
+      {'day': 'Lunedì', 'meal': 'Colazione', 'food': 'Latte soia', 'grams': 200},
+      ...
+    ]
+    """
+    # Carichiamo il DB
+    df_db = load_food_db()
+    if df_db.empty: return False
+    
+    # Resettiamo il piano attuale (Opzionale: se vuoi sovrascrivere)
+    initialize_meal_plan_state()
+    
+    # Mappatura nomi pasti AI -> Nomi pasti System
+    # L'AI potrebbe scrivere "Spuntino" e noi abbiamo "Spuntino Mattina". Normalizziamo.
+    meal_map = {
+        "colazione": "Colazione",
+        "spuntino mattina": "Spuntino Mattina",
+        "pranzo": "Pranzo",
+        "spuntino pomeriggio": "Spuntino Pomeriggio",
+        "cena": "Cena",
+        "snack": "Spuntino Mattina" # Fallback
+    }
+
+    count_added = 0
+    
+    for item in ai_json_plan:
+        day = item.get('day', '').capitalize() # Assicura "Lunedì"
+        meal_raw = item.get('meal', '').lower()
+        food_query = item.get('food', '')
+        grams = item.get('grams', 100)
+        
+        # 1. Trova il Giorno Corretto
+        if day not in DAYS_OF_WEEK:
+            continue # Salta giorni non validi
+            
+        # 2. Trova il Pasto Corretto (Matching approssimativo)
+        target_meal = None
+        for key, val in meal_map.items():
+            if key in meal_raw:
+                target_meal = val
+                break
+        if not target_meal: target_meal = "Colazione" # Default se non capisce
+        
+        # 3. Cerca l'alimento nel CSV
+        match_row = find_closest_food_match(food_query, df_db)
+        
+        if match_row is not None:
+            # 4. Aggiungi usando la funzione che abbiamo già!
+            add_food_to_meal(day, target_meal, match_row, grams)
+            count_added += 1
+        else:
+            # Opzionale: Aggiungere un "Placeholder" se non trova l'alimento?
+            # Per ora saltiamo per non sporcare il piano con errori.
+            print(f"Alimento non trovato nel DB: {food_query}")
+            
+    return count_added
