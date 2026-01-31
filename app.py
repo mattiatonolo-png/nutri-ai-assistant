@@ -232,35 +232,80 @@ def estrai_piano_in_json(testo_ai):
             
         return json.loads(text.strip())
     except Exception as e:
-        # Stampa errore in console per debug
         print(f"Errore parsing: {e}")
         return None
 
 # =========================================================
-# 5. SIDEBAR & ADMIN TOOLS
+# 5. SIDEBAR COMPLETA (AGGIORNATA)
 # =========================================================
 with st.sidebar:
-    st.header("📋 Anamnesi")
-    st.info("👉 **Vai al Meal Planner** nella sidebar a sinistra per vedere il piano strutturato.")
+    st.header("📋 Anamnesi Paziente")
+    st.info("👉 **Vai al Meal Planner** per vedere la dieta generata.")
     
-    with st.expander("Dati Paziente", expanded=True):
+    # 1. DATI BIOMETRICI E STILE DI VITA
+    with st.expander("👤 Dati Biometrici", expanded=True):
         col1, col2 = st.columns(2)
         with col1:
             sesso = st.selectbox("Sesso", ["Uomo", "Donna"])
             eta = st.number_input("Età", 18, 100, 30)
         with col2:
-            peso = st.number_input("Peso", 40, 150, 70)
-            altezza = st.number_input("Altezza", 140, 220, 170)
-        regime = st.selectbox("Regime", ["Onnivora", "Vegetariana", "Vegana", "Chetogenica"])
-        cibi_no = st.text_input("Esclusioni", placeholder="Es. Cipolla")
-    
-    with st.expander("Clinica"):
-        metaboliche = st.multiselect("Metaboliche", ["Diabete T2", "Insulino-resistenza", "Dislipidemia"])
-        gastro = st.multiselect("Gastro", ["IBS", "Reflusso", "Celiachia"])
-        obiettivo = st.selectbox("Obiettivo", ["Dimagrimento", "Mantenimento", "Gestione Glicemica"])
+            peso = st.number_input("Peso (kg)", 40, 150, 70)
+            altezza = st.number_input("Altezza (cm)", 140, 220, 170)
+        
+        attivita = st.selectbox("Livello Attività", [
+            "Sedentario (Ufficio)", 
+            "Leggero (Sport 1-2/sett)", 
+            "Moderato (Sport 3-4/sett)", 
+            "Intenso (Atleta/Lavoro fisico)"
+        ])
+        
+        condizione_speciale = st.selectbox("Stato Fisiologico", ["Normale", "Gravidanza", "Allattamento", "Menopausa"])
+
+    # 2. ABITUDINI ALIMENTARI
+    with st.expander("🍎 Abitudini Alimentari", expanded=False):
+        regime = st.selectbox("Regime", ["Onnivora", "Vegetariana", "Vegana", "Pescatariana", "Chetogenica", "Low-Carb", "Paleo"])
+        cibi_no = st.text_input("Esclusioni/Gusti", placeholder="Es. No Cipolla, Odia il pesce")
+
+    # 3. QUADRO CLINICO (Espanso per dare priorità)
+    with st.expander("🩺 Quadro Clinico", expanded=True):
+        st.caption("Seleziona patologie note:")
+        
+        metaboliche = st.multiselect("Metabolismo & Endocrino", [
+            "Diabete T2", "Insulino-resistenza", "Dislipidemia (Colesterolo)", 
+            "Ipertensione", "Ipotiroidismo", "Hashimoto", "PCOS (Ovaio Policistico)"
+        ])
+        
+        gastro = st.multiselect("Gastro-Intestinale", [
+            "IBS (Colon Irritabile)", "Reflusso/Gastrite", "Celiachia", 
+            "Intolleranza Lattosio", "Gonfiore Addominale", "Stipsi"
+        ])
+        
+        # Lista Obiettivi Avanzata
+        obiettivo = st.selectbox("Obiettivo Primario", [
+            # 1. Gestione Peso
+            "Dimagrimento (Calo Peso)", 
+            "Ricomposizione Corporea (Grass Loss + Muscle)", 
+            "Mantenimento Peso",
+            # 2. Sport & Estetica
+            "Ipertrofia Muscolare (Massa)", 
+            "Performance Sportiva (Endurance/Gara)",
+            # 3. Clinico - Metabolico
+            "Gestione Glicemica (Diabete/IR)", 
+            "Salute Cardiovascolare (Colesterolo/Ipertensione)",
+            "Salute Epatica (Detox/Steatosi)",
+            # 4. Clinico - Gastro & Altro
+            "Benessere Intestinale (Gonfiore/Regolarità)", 
+            "Protocollo Anti-infiammatorio (AI)",
+            "Gestione Autoimmune (Hashimoto/Psoriasi)",
+            # 5. Benessere Generale
+            "Supporto Ormonale (PCOS/Fertilità/Menopausa)",
+            "Energy Boost & Focus Mentale",
+            "Educazione Alimentare (No grammature)"
+        ])
 
     st.divider()
     
+    # --- ADMIN TOOLS ---
     with st.expander("🛠️ Admin & Debug Tools", expanded=False):
         st.info(f"Stato Memoria: {STATUS_MSG}")
         c1, c2 = st.columns(2)
@@ -279,21 +324,26 @@ with st.sidebar:
                     st.download_button("💾 Download ZIP", data=fp, file_name="faiss_index_store.zip", mime="application/zip", use_container_width=True)
         
         st.divider()
-        st.write("🕵️‍♂️ **File Inspector**")
-        if os.path.exists("documenti"):
-            files_in_folder = [f for f in os.listdir("documenti") if f.endswith('.pdf')]
-            sel_file = st.selectbox("Seleziona File:", files_in_folder)
-            if st.button("🔍 Analizza Pagina 1"):
-                try:
-                    path = os.path.join("documenti", sel_file)
-                    reader = PdfReader(path)
-                    st.code(reader.pages[0].extract_text(), language="markdown")
-                except Exception as e: st.error(str(e))
+        st.write("🔧 **Test Connessione DB Cibo**")
+        test_cibo = st.text_input("Test Cerca Cibo:", "Pasta")
+        if st.button("Cerca nel DB"):
+            try:
+                db = mpl.load_food_db()
+                if db.empty:
+                    st.error("Il Database risulta VUOTO.")
+                else:
+                    res = mpl.find_closest_food_match(test_cibo, db)
+                    if res is not None:
+                        st.success(f"Trovato: {res['Nome']} ({res['Kcal']} kcal)")
+                    else:
+                        st.warning("Nessun risultato trovato.")
+            except Exception as e:
+                st.error(f"Errore: {e}")
 
 # =========================================================
 # 6. APP PRINCIPALE
 # =========================================================
-st.title("🩺 Nutri-AI: Clinical Assistant v7.6")
+st.title("🩺 Nutri-AI: Clinical Assistant v7.7")
 
 st.subheader("🩸 Esami Ematici")
 col_sx, col_dx = st.columns([2, 1])
@@ -305,7 +355,17 @@ with col_dx:
     else:
         st.error("❌ Nessuna fonte caricata")
 
-PROFILO = f"Paziente: {sesso}, {eta}anni, {peso}kg. Dieta: {regime}. No: {cibi_no}. Patologie: {metaboliche}, {gastro}. Obiettivo: {obiettivo}.\nEsami:\n{esami_df.to_string(index=False)}"
+# Costruzione Profilo con i nuovi campi
+PROFILO = f"""
+Paziente: {sesso}, {eta} anni, {peso}kg x {altezza}cm.
+Livello Attività: {attivita}. Stato: {condizione_speciale}.
+Dieta Attuale: {regime}. Esclusioni: {cibi_no}.
+Patologie Metaboliche: {', '.join(metaboliche)}.
+Patologie Gastro: {', '.join(gastro)}.
+Obiettivo: {obiettivo}.
+Esami Ematici:
+{esami_df.to_string(index=False)}
+"""
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -327,6 +387,7 @@ if prompt := st.chat_input("Scrivi qui la tua richiesta..."):
                 docs = VECTOR_STORE.similarity_search(q_aug, k=5) if VECTOR_STORE else []
                 context = "\n".join([f"FONTE {d.metadata.get('source')}: {d.page_content}" for d in docs]) or "Nessuna fonte specifica trovata."
 
+                # PROMPT SYSTEM AGGIORNATO CON REGOLE STRATEGICHE
                 ISTRUZIONI = f"""
                 RUOLO: Nutrizionista Clinico (Evidence-Based).
                 
@@ -340,6 +401,11 @@ if prompt := st.chat_input("Scrivi qui la tua richiesta..."):
                 1. CHECK SICUREZZA: Panic Values (es. Potassio <2.5) -> PS. Celiachia -> No Glutine.
                 2. CLINICA: Diabete (Low GI, <15% zuccheri), IBS (Low-FODMAP).
                 3. FORMAT: Usa tabelle Markdown (| A | B |) per le diete.
+                4. OBIETTIVO STRATEGICO:
+                   - Se "Ipertrofia": Alte Proteine (1.6-2g/kg), Surplus calorico.
+                   - Se "Performance": Alti Carboidrati, Timing peri-workout.
+                   - Se "Salute Epatica": No Alcol, Basso Fruttosio, Colina.
+                   - Se "Educazione Alimentare": Niente grammi precisi, usa "porzioni" o "piatto sano".
                 """
                 
                 resp = client.models.generate_content(
@@ -369,7 +435,7 @@ if prompt := st.chat_input("Scrivi qui la tua richiesta..."):
                             json_plan = estrai_piano_in_json(resp.text)
                             
                             if json_plan:
-                                # Chiamata alla logica (Assicurati che meal_planner_logic restituisca 2 valori!)
+                                # Chiamata alla logica
                                 count, logs = mpl.import_ai_plan_to_state(json_plan)
                                 
                                 # Visualizzazione Logs Debug
